@@ -9,5 +9,10 @@ pipeline {
                 sh 'date'
             }
         }
+        stage("Test"){
+            steps {
+                sh 'git --version'
+            }
+        }
     }
 }
