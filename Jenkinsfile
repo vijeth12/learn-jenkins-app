@@ -51,9 +51,11 @@ pipeline {
             steps {
                 sh '''
                     npm install serve
-                    node_modules/.bin/semver -s build &
+                    serve -s build -l 3000 &
+                    SERVER_PID=$!
                     sleep 10
                     npx playwright test
+                    kill $SERVER_PID
                 '''
             }
         }
