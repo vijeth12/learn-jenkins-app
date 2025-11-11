@@ -2,12 +2,11 @@ pipeline {
     agent any
 
     stages {
-        /*
-
         stage('Build') {
             agent {
                 docker {
                     image 'node:18-alpine'
+                    args '-v $WORKSPACE:/app -w /app'
                     reuseNode true
                 }
             }
@@ -18,23 +17,22 @@ pipeline {
                     npm --version
                     npm ci
                     npm run build
-                    ls -la
+                    ls -la build
                 '''
             }
         }
-        */
 
         stage('Test') {
             agent {
                 docker {
                     image 'node:18-alpine'
+                    args '-v $WORKSPACE:/app -w /app'
                     reuseNode true
                 }
             }
-
             steps {
                 sh '''
-                    #test -f build/index.html
+                    echo "Running tests..."
                     npm test
                 '''
             }
@@ -44,16 +42,23 @@ pipeline {
             agent {
                 docker {
                     image 'mcr.microsoft.com/playwright:v1.39.0-jammy'
+                    args '-v $WORKSPACE:/app -w /app'
                     reuseNode true
                 }
             }
-
             steps {
                 sh '''
+                    echo "Contents of build folder:"
+                    ls -la build
+
                     npm install serve
-                    node_modules/.bin/serve -s build &
+                    chmod +x node_modules/.bin/serve
+
+                    # Start the app in the background
+                    node_modules/.bin/serve -s build -l 3000 &
                     sleep 10
-                    npx playwright test
+
+                    npx playwright test --reporter=junit --output=playwright-report
                 '''
             }
         }
@@ -61,7 +66,7 @@ pipeline {
 
     post {
         always {
-            junit 'jest-results/junit.xml'
+            junit 'playwright-report/results.xml'
         }
     }
 }
