@@ -75,6 +75,9 @@ pipeline {
                 }
             }
         }
+        stage('Approval') {
+            input message: 'Ready to deploy?', ok: 'Yes, Im sure!'
+        }
 
         stage('Deploy') {
             agent {
