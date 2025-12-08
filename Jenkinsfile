@@ -2,11 +2,13 @@ pipeline {
     agent any
 
     environment {
-        NETLIFY_SITE_ID = '03d4042d-476c-4668-9ce8-34352dad73e4'
+        NETLIFY_SITE_ID = 'b3f524b2-3255-4e7b-9df7-8135f77f5d2e'
         NETLIFY_AUTH_TOKEN = credentials('netlify-token')
     }
 
     stages {
+
+        /* ---------------------- BUILD ---------------------- */
 
         stage('Build') {
             agent {
@@ -17,29 +19,34 @@ pipeline {
             }
             steps {
                 sh '''
-                    ls -la
-                    node --version
-                    npm --version
+                    echo "--- Node Info ---"
+                    node -v
+                    npm -v
+
+                    echo "--- Installing Dependencies ---"
                     npm ci
+
+                    echo "--- Running Build ---"
                     npm run build
-                    ls -la
                 '''
             }
         }
 
+        /* ---------------------- TESTS ---------------------- */
+
         stage('Tests') {
             parallel {
-                stage('Unit tests') {
+
+                stage('Unit Tests') {
                     agent {
                         docker {
                             image 'node:18-alpine'
                             reuseNode true
                         }
                     }
-
                     steps {
                         sh '''
-                            #test -f build/index.html
+                            echo "--- Running Unit Tests ---"
                             npm test
                         '''
                     }
@@ -50,46 +57,68 @@ pipeline {
                     }
                 }
 
-                stage('E2E') {
+                stage('E2E Tests') {
                     agent {
                         docker {
                             image 'mcr.microsoft.com/playwright:v1.39.0-jammy'
                             reuseNode true
                         }
                     }
-
                     steps {
                         sh '''
+                            echo "--- Installing Serve ---"
+                            npm init -y >/dev/null 2>&1 || true
                             npm install serve
-                            node_modules/.bin/serve -s build &
-                            sleep 10
-                            npx playwright test  --reporter=html
+
+                            echo "--- Starting Local Server ---"
+                            node_modules/.bin/serve -s build -l 3000 &
+
+                            echo "--- Waiting for Server ---"
+                            for i in {1..10}; do
+                              nc -z localhost 3000 && echo "Server Ready" && break
+                              echo "Waiting..."
+                              sleep 2
+                            done
+
+                            echo "--- Running Playwright Tests ---"
+                            npx playwright test --reporter=html
                         '''
                     }
 
                     post {
                         always {
-                            publishHTML([allowMissing: false, alwaysLinkToLastBuild: false, keepAll: false, reportDir: 'playwright-report', reportFiles: 'index.html', reportName: 'Playwright HTML Report', reportTitles: '', useWrapperFileDirectly: true])
+                            publishHTML([
+                                reportDir: 'playwright-report',
+                                reportFiles: 'index.html',
+                                reportName: 'Playwright HTML Report'
+                            ])
                         }
                     }
                 }
             }
         }
 
-        stage('Deploy') {
+        /* ---------------------- DEPLOY ---------------------- */
+
+        stage('Deploy to Netlify') {
             agent {
                 docker {
-                    image 'node:18-alpine'
+                    image 'node:18'
                     reuseNode true
                 }
             }
             steps {
                 sh '''
+                    echo "--- Installing Netlify CLI ---"
                     npm install netlify-cli
-                    node_modules/.bin/netlify --version
-                    echo "Deploying to production. Site ID: $NETLIFY_SITE_ID"
-                    node_modules/.bin/netlify status
+
+                    echo "--- Checking Build Directory ---"
+                    test -d build || (echo "ERROR: build directory missing!" && exit 1)
+
+                    echo "--- Deploying to Netlify ---"
                     node_modules/.bin/netlify deploy --dir=build --prod
+
+                    echo "🎉 Deployment Successful!"
                 '''
             }
         }
