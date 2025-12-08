@@ -76,7 +76,9 @@ pipeline {
             }
         }
         stage('Approval') {
+            steps{
             input message: 'Ready to deploy?', ok: 'Yes, I\'m sure!'
+            }
         }
 
         stage('Deploy') {
